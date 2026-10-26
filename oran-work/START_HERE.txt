@@ -1,0 +1,290 @@
+═══════════════════════════════════════════════════════════════════
+  O-RAN CONGESTION PREDICTION: DAY 3 SETUP COMPLETE ✅
+═══════════════════════════════════════════════════════════════════
+
+📅 Date: October 26, 2026, 14:42 UTC
+🎯 Status: READY TO START DAY 3 TESTING
+⏱️  Time to complete: ~2-3 hours
+
+───────────────────────────────────────────────────────────────────
+  📦 BACKUPS SECURED
+───────────────────────────────────────────────────────────────────
+
+✅ /home/oran/Desktop/backups/backup_20261026_200723.tar.gz (3.9M)
+   Contains: All previous work (5G/, phase2_corrected/, vm_export/, vm_shared/)
+
+───────────────────────────────────────────────────────────────────
+  📁 NEW FILES CREATED IN ~/oran-work/
+───────────────────────────────────────────────────────────────────
+
+✅ SETUP_COMPLETE.md (9.4K)      → Read this first! Complete guide
+✅ README.md (8.2K)              → Detailed Day 3 reference
+✅ gnb_single.yaml (5.5K)        → Corrected gNB config (250ms)
+✅ day3_test_guide.sh (6.9K)     → Interactive testing script ⚡
+✅ day3_setup_checklist.sh (3.4K)→ Prerequisites verification ⚡
+✅ day3_results_template.txt     → Document your findings
+✅ metrics_summary.py (2.0K)     → Parse gNB logs ⚡
+✅ runs/ (directory)             → Ready for Day 4 data
+
+   ⚡ = Executable script
+
+───────────────────────────────────────────────────────────────────
+  🔧 KEY CONFIGURATION VERIFIED
+───────────────────────────────────────────────────────────────────
+
+gnb_single.yaml contains:
+  ✅ du_report_period: 250        (250ms intervals)
+  ✅ enable_log: true              (Primary data source)
+  ✅ enable_json: true             (Websocket for live xApp)
+  ✅ mcs_table: qam64              (Matches TRACTOR dataset)
+  ✅ remote_control: enabled       (Port 8001)
+  ✅ all_level: warning            (Clean logs)
+
+───────────────────────────────────────────────────────────────────
+  🚀 YOUR NEXT STEPS (Start Now!)
+───────────────────────────────────────────────────────────────────
+
+STEP 1 → Verify Prerequisites (5 minutes)
+────────────────────────────────────────
+
+    cd ~/oran-work
+    ./day3_setup_checklist.sh
+
+Expected: All checks pass ✓
+
+If fails, install missing:
+    sudo apt install -y moreutils python3-pip
+    pip3 install websocket-client
+
+
+STEP 2 → Run Day 3 Tests (2-3 hours)
+────────────────────────────────────
+
+    cd ~/oran-work
+    ./day3_test_guide.sh
+
+OR save full output:
+
+    ./day3_test_guide.sh 2>&1 | tee day3_output.txt
+
+Script will guide you through:
+  • Starting 5 terminals (Core → RIC → gNB → UE → Test)
+  • Verifying 250ms metrics (E1)
+  • Testing JSON feed (E2)
+  • Testing KPM at 250ms (E3)
+  • Measuring single-UE capacity (E4)
+  • Confirming 64-QAM (E5)
+
+
+STEP 3 → Document Results (15 minutes)
+──────────────────────────────────────
+
+    cp ~/oran-work/day3_results_template.txt ~/oran-work/day3_results.txt
+    nano ~/oran-work/day3_results.txt
+
+Fill in all measurements and findings.
+
+
+STEP 4 → Send to Friend for Approval
+─────────────────────────────────────
+
+Send:
+  • day3_results.txt (completed)
+  • Sample metrics_summary.py output
+  • Capacity test findings
+  • Any issues
+
+⚠️  WAIT for approval before Day 4!
+
+───────────────────────────────────────────────────────────────────
+  ✅ WHAT DAY 3 VALIDATES
+───────────────────────────────────────────────────────────────────
+
+E1: 250ms Metrics ✓
+    → wall_ms ≈ 250 (reports every 250ms)
+    → slots = 250 (gNB time units)
+    → time_x ≈ 1.00 (real-time speed, not slow-motion)
+    → All 6 inputs visible: cqi, snr_db, dl_Mbps, ul_Mbps, ul_err%, dl_bs
+
+E2: JSON Feed ✓
+    → Websocket metrics on port 8001
+    → Will be used for live xApp in Day 4+
+
+E3: KPM 250ms ✓
+    → Check if E2 supports 250ms reporting
+    → Test if RRU.PrbUsedDl available over E2
+
+E4: Single-UE Capacity ✓
+    → Measure max throughput (cell capacity C)
+    → Verify radio bottleneck, not CPU
+    → cell_util should reach ~0.9-1.0 at saturation
+
+E5: CQI Table ✓
+    → Confirm 64-QAM table (matches TRACTOR)
+    → CQI values should be 0-15 only
+
+───────────────────────────────────────────────────────────────────
+  ⚠️  CRITICAL SUCCESS CRITERIA
+───────────────────────────────────────────────────────────────────
+
+MUST PASS ✓
+  □ time_x ≈ 1.0 throughout (proves real-time)
+  □ All 6 measurements visible
+  □ Single-UE capacity measured
+  □ cell_util reaches ~0.9-1.0 at saturation
+  □ No CPU pinned at 100%
+
+WARNING SIGNS ⚠️
+  ⚠ time_x < 0.9           → CPU too slow, can't do 3 UEs
+  ⚠ cell_util < 0.8 at max → CPU bottleneck
+  ⚠ Missing measurements   → Config error
+
+───────────────────────────────────────────────────────────────────
+  🔄 WHAT WAS FIXED
+───────────────────────────────────────────────────────────────────
+
+BEFORE (WRONG) ❌                    AFTER (CORRECT) ✅
+─────────────────────────────────────────────────────────────────
+1-second intervals                   250ms intervals
+E2SM-KPM subscription               gNB log metrics
+kpm_logger_xapp.py                  metrics_summary.py
+Manual "normal/congested" labels    delivered÷offered formula
+JSON as primary source              Log as primary source
+Would invalidate E6 experiment      E6 remains pure test set
+
+───────────────────────────────────────────────────────────────────
+  📊 EXPECTED GOOD RESULTS
+───────────────────────────────────────────────────────────────────
+
+Metrics Output Example:
+┌─────────────────────────────────────────────────────────────┐
+│ wall_ms slots time_x cell_util | UE metrics                 │
+│     250   250   1.00     0.347 | rnti cqi snr dl ul err bs │
+│     250   250   1.02     0.351 | 0x46  15  28  12  0   0 4K│
+└─────────────────────────────────────────────────────────────┘
+
+Capacity Test Example:
+  Offered: 5M  → Delivered: 5M   → cell_util: 0.15
+  Offered: 10M → Delivered: 10M  → cell_util: 0.30
+  Offered: 20M → Delivered: 20M  → cell_util: 0.60
+  Offered: 30M → Delivered: 29M  → cell_util: 0.89 ← Near capacity
+  Offered: 40M → Delivered: 30M  → cell_util: 0.95 ← PLATEAU = C
+  Offered: 50M → Delivered: 30M  → cell_util: 0.95 ← PLATEAU = C
+
+  Single-UE Capacity C ≈ 30 Mbps
+
+───────────────────────────────────────────────────────────────────
+  🆘 QUICK TROUBLESHOOTING
+───────────────────────────────────────────────────────────────────
+
+Problem: No metrics in /tmp/gnb.log
+Fix: Check gNB started with: -c ~/oran-work/gnb_single.yaml
+
+Problem: wall_ms ≈ 1000 instead of 250
+Fix: Check du_report_period: 250 indentation in YAML
+
+Problem: time_x << 1.0
+Fix: CPU too slow → close apps, add VM cores, or report
+
+Problem: JSON test shows nothing
+Fix: Check remote_control: section in gnb_single.yaml
+
+Problem: UE won't attach
+Fix: Wait 60 seconds after stopping gNB before restart
+
+Problem: iperf3 connection refused
+Fix: Start server: iperf3 -s -p 5201 -D
+
+───────────────────────────────────────────────────────────────────
+  📧 QUICK COMMANDS
+───────────────────────────────────────────────────────────────────
+
+# Verify setup
+cd ~/oran-work && ./day3_setup_checklist.sh
+
+# Run Day 3 tests
+cd ~/oran-work && ./day3_test_guide.sh
+
+# Check metrics manually
+python3 ~/oran-work/metrics_summary.py /tmp/gnb.log 12
+
+# Manual capacity test
+iperf3 -s -p 5201 -D
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -p 5201 -u -b 20M -R -t 30
+python3 ~/oran-work/metrics_summary.py /tmp/gnb.log 4
+
+───────────────────────────────────────────────────────────────────
+  📚 DOCUMENTATION FILES
+───────────────────────────────────────────────────────────────────
+
+START HERE:
+  ~/oran-work/SETUP_COMPLETE.md    ← Read this first!
+
+REFERENCE:
+  ~/oran-work/README.md            ← Detailed Day 3 guide
+
+FOR TESTING:
+  ~/oran-work/day3_test_guide.sh   ← Run the tests
+
+FOR RESULTS:
+  ~/oran-work/day3_results_template.txt → Fill this out
+
+───────────────────────────────────────────────────────────────────
+  ⏱️  TIMELINE
+───────────────────────────────────────────────────────────────────
+
+Setup verification        →  5-10 min
+Install missing deps      →  0-5 min (if needed)
+Start 5 terminals         → 10-15 min
+Run E1-E3 tests          → 20-30 min
+Run E4 capacity test     → 30-45 min
+Document results         → 15-30 min
+──────────────────────────────────────
+TOTAL DAY 3              ≈ 2-3 hours
+
+───────────────────────────────────────────────────────────────────
+  🎯 PROJECT CONTEXT
+───────────────────────────────────────────────────────────────────
+
+YOUR ROLE:
+  ❌ Don't train models (dataset team does this)
+  ✅ Do collect E6 test data at 250ms intervals
+  ✅ Do measure real radio congestion
+  ✅ Do provide zero-shot validation set
+
+THE EXPERIMENT:
+  Dataset team trains on simulation (E1-E5)
+  You collect E6 test set on live hardware
+  Proves sim-to-reality transfer works
+
+WHY 250ms MATTERS:
+  • Simulation uses 250ms bins
+  • TRACTOR real data uses 250ms bins
+  • Prediction window = 10 timesteps = 2.5 seconds
+  • E6 must match to be valid test set
+
+───────────────────────────────────────────────────────────────────
+  🎉 YOU'RE READY!
+───────────────────────────────────────────────────────────────────
+
+All files created ✅
+All configs verified ✅
+Backups secured ✅
+Scripts executable ✅
+Documentation complete ✅
+
+═══════════════════════════════════════════════════════════════════
+
+START NOW with:
+
+    cd ~/oran-work
+    ./day3_setup_checklist.sh
+
+═══════════════════════════════════════════════════════════════════
+
+Questions? Read ~/oran-work/SETUP_COMPLETE.md
+Stuck? Check ~/oran-work/README.md troubleshooting section
+
+Good luck! 🚀
+
+═══════════════════════════════════════════════════════════════════

@@ -1,0 +1,16 @@
+# Ignore backup files
+backups/*.tar.gz
+backups/*.zip
+
+# Ignore temporary files
+*.log
+*.tmp
+*.swp
+*~
+
+# Ignore large data files
+*.pcap
+runs/
+
+# Keep directory structure
+!.gitkeep

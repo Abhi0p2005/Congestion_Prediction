@@ -1,0 +1,138 @@
+# Day 3 Test Results
+## Date: 2026-10-26
+
+---
+
+## E1: 250ms Metrics Verification
+
+### Metrics Summary Output:
+```
+[Paste output of metrics_summary.py here]
+```
+
+### Verification Checklist:
+- [ ] wall_ms ≈ 250 for each report
+- [ ] slots = 250 for each report  
+- [ ] time_x ≈ 1.00 (real-time speed)
+- [ ] All 6 inputs visible: cqi, snr_db, dl_Mbps, ul_Mbps, ul_err%, dl_bs
+
+### Notes:
+```
+[Any observations or issues]
+```
+
+---
+
+## E2: JSON Websocket Feed Test
+
+### Result:
+- [ ] JSON output received
+- [ ] Contains "cells" structure
+- [ ] Contains "ue_list" with metrics
+- [ ] Fields present: cqi, pusch_snr_db, dl_brate, ul_brate, ul_nof_ok, ul_nof_nok, dl_bs
+
+### Notes:
+```
+[Any observations]
+```
+
+---
+
+## E3: KPM 250ms Test
+
+### Result:
+- [ ] Subscription successful
+- [ ] Indications per second: [1 / 4]
+- [ ] RRU.PrbUsedDl present: [YES / NO]
+- [ ] RRU.PrbUsedDl changes with traffic: [YES / NO]
+
+### Notes:
+```
+[Full output or summary]
+```
+
+---
+
+## E4: Single-UE Capacity Test
+
+### Capacity Test Results:
+
+| Offered Rate | Delivered Rate | Loss % | cell_util | time_x | Max CPU % |
+|--------------|----------------|--------|-----------|--------|-----------|
+| 5M           |                |        |           |        |           |
+| 10M          |                |        |           |        |           |
+| 20M          |                |        |           |        |           |
+| 30M          |                |        |           |        |           |
+| 40M          |                |        |           |        |           |
+| 50M          |                |        |           |        |           |
+
+### Single-UE Capacity:
+- **Measured capacity:** _____ Mbps (where throughput plateaus)
+- **cell_util at plateau:** _____
+- **time_x throughout test:** _____
+- **Bottleneck:** [ ] Radio (cell_util ~0.9-1.0) / [ ] CPU (cell_util low, CPU 100%)
+
+### Notes:
+```
+[Any observations, warnings, or issues]
+```
+
+---
+
+## E5: CQI Table Confirmation
+
+### Config Check:
+```bash
+$ grep -A1 "pdsch:" ~/oran-work/gnb_single.yaml
+```
+
+Output:
+```
+[Paste output]
+```
+
+- [ ] mcs_table: qam64 confirmed
+
+### CQI Range Observed:
+- Min CQI: _____
+- Max CQI: _____
+- [ ] All values between 0-15 (64-QAM table confirmed)
+
+---
+
+## Overall Day 3 Status
+
+- [ ] All 4 verifications (E1-E4) passed
+- [ ] 250ms reporting confirmed at real-time speed
+- [ ] All 6 measurements visible
+- [ ] Single-UE capacity measured
+- [ ] No CPU bottleneck detected
+
+### Issues Encountered:
+```
+[List any problems and how they were resolved]
+```
+
+### Ready for Day 4:
+- [ ] YES - All tests passed, can proceed to multi-UE
+- [ ] NO - Issues need resolution first
+
+---
+
+## Files Generated:
+- [ ] ~/oran-work/day3_results.txt (this file)
+- [ ] /tmp/gnb.log (gNB metrics log)
+- [ ] Screenshots or output captures if needed
+
+---
+
+## Next Steps:
+1. Review this document with your friend
+2. Get confirmation before proceeding to Day 4
+3. If approved, prepare for 3-UE setup
+
+---
+
+**Completed by:** [Your name]
+**Date:** 2026-10-26
+**Time spent:** _____ hours
