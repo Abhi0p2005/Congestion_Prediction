@@ -12,8 +12,11 @@ backups/*.zip
 *.pcap
 runs/
 
-# Ignore desktop notes
+# Ignore desktop notes / backups / unneeded folders
 DAY3_READY.txt
+vm_export/
+vm_shared/
+backups/
 
 # Ignore old 5G folder (relevant files moved to docs/)
 5G/
