@@ -12,5 +12,11 @@ backups/*.zip
 *.pcap
 runs/
 
+# Ignore desktop notes
+DAY3_READY.txt
+
+# Ignore old 5G folder (relevant files moved to docs/)
+5G/
+
 # Keep directory structure
 !.gitkeep
