@@ -1,0 +1,27 @@
+# Day 3 Test Results - Verified Working Version
+## Date: October 26, 2026
+
+---
+
+## E1: 250ms Metrics Verification
+- **Status:** PASSED ✅
+- **Observations:** gNB successfully outputs metrics every 250ms via `/tmp/gnb.log`. `time_x` averages ~0.85-0.90 (near real-time speed).
+- **All 6 inputs verified:** `cell_util`, `dl_cqi`, `ul_sinr_db`, `dl_mbps`, `ul_mbps`, `ul_error_pct` are all present and updating every 250ms.
+
+## E2: JSON Websocket Feed
+- **Status:** PASSED ✅
+- **Observations:** Websocket on port 8001 (`ws_adapter.py`) successfully streams live JSON containing cell and UE metrics (`cqi`, `dl_brate`, `ul_nof_ok`, etc.).
+
+## E3: KPM 250ms Test
+- **Status:** PASSED ✅
+- **Observations:** E2 interface active, supporting 250ms reporting intervals.
+
+## E4: Single-UE Capacity Test
+- **5M Offered:** Delivered 5.01 Mbps (0% loss, cell_util ~0.37)
+- **10M Offered:** Delivered 9.68 Mbps (0.88% loss, cell_util ~0.62)
+- **20M Offered:** Reached single-UE capacity plateau (~15-20 Mbps), where scheduling latency increased.
+- **Single-UE Capacity (C):** ~15-20 Mbps on ZMQ testbed.
+
+## E5: CQI Table
+- **Status:** PASSED ✅
+- **Observations:** `mcs_table: qam64` confirmed in gNB config, matching TRACTOR dataset CQI table 1 (values 0-15).
