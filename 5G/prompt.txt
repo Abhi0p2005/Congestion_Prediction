@@ -1,0 +1,486 @@
+Here's the full guide from the very first download, compressed into 2 days. It's self-contained, so you can paste it into another chat or send it to a teammate as is.
+
+---
+
+# O-RAN Congestion Prediction xApp: Setup Guide (2 Days, From Scratch)
+
+## General overview
+
+**What we're building:** an AI-based congestion prediction xApp running on a fully simulated 5G O-RAN network. No radio hardware and no ESP32; everything runs in software inside one Ubuntu 22.04 virtual machine.
+
+**How the system works:**
+
+```
+ srsUE (simulated phone, in Linux network namespace "ue1")
+     │  ZeroMQ "virtual radio" over TCP (ports 2000/2001), no antenna
+     ▼
+ srsRAN Project gNB (base station: CU + DU)
+     │  N2/N3 (NGAP 38412) ──────► Open5GS 5G Core (Docker, 10.53.1.2)
+     │  E2 (SCTP 36421)
+     ▼
+ Near-RT RIC = oran-sc-ric (Docker, E2 termination at 10.0.2.10)
+     │
+     ▼
+ Our Python xApp (runs in the RIC's python_xapp_runner container, 10.0.2.20)
+   1. Receives live KPIs every 1 s via E2SM-KPM
+   2. Adapter → trained congestion model (8 features × 10-timestep window)
+   3. If congestion is predicted → sends an E2SM-RC control (PRB quota change)
+```
+
+**Overall project plan (2–3 months):**
+1. Simulated 5G network running (gNB + UE + core), with data flowing
+2. RIC added, and the E2 link proven with the example KPM xApp
+3. Live KPIs compared with the model's 8 features, plus an adapter
+4. Our xApp, prediction half (live data → model → predictions logged)
+5. Our xApp, control half (prediction → RC control message → network reacts)
+6. Experiment: forced congestion, xApp ON vs OFF, compare results
+7. Live dashboard
+8. Stabilise, document, write the report
+
+**Fallback:** if the control loop (step 5) fails, we present a prediction-only xApp: live KPIs → model → congestion alerts.
+
+**What these 2 days cover:**
+- **Day 1:** downloads, VM, Ubuntu, all builds, and the 5G network working end-to-end (project step 1)
+- **Day 2:** RIC + E2 proven with the example xApps, plus the control path tested (project step 2, and early de-risking of step 5). Optionally, live KPI logging to CSV as groundwork for step 3.
+
+---
+
+## Fixed decisions and versions (don't deviate from these)
+
+| Item | Exact choice |
+|---|---|
+| Host laptop | Windows, **16 GB+ RAM**, 4+ cores, virtualization enabled, 100 GB+ free disk |
+| Hypervisor | **Oracle VirtualBox 7.x** (latest Windows-hosts build) |
+| Guest OS | **Ubuntu 22.04 LTS Desktop, 64-bit** (`ubuntu-22.04.x-desktop-amd64.iso`). Not 24.04, not WSL. |
+| VM resources | 8 GB RAM, half the host's cores (min 4), 80 GB dynamic disk |
+| VM display | Video memory 128 MB, graphics controller VMSVGA, 3D acceleration off |
+| VM network | **NAT** (default) |
+| gNB | **srsRAN Project**, git tag **`release_25_10`**, built with ZMQ |
+| UE | **srsRAN 4G (srsUE)**, git tag **`release_23_11`**, built with ZMQ |
+| 5G Core | **Open5GS from `srsRAN_Project/docker`** (Docker service `5gc`). Never install Open5GS manually. |
+| RIC | **`srsran/oran-sc-ric`**, commit **`621ade2`** (O-RAN SC "i-release"). **No FlexRIC.** |
+| Config files | **Only** `~/oran-sc-ric/e2-agents/srsRAN/gnb_zmq.yaml` and `ue_zmq.conf` (a matched pair) |
+| Radio settings | Band 3 (FDD), 10 MHz, 15 kHz SCS, DL ARFCN 368500, sample rate 11.52 MHz |
+| UEs | **1 UE** (E2 UE ID `0`) |
+| xApp language | Python, using `oran-sc-ric/xApps/python/lib` (`xAppBase`, `e2sm_kpm`, `e2sm_rc`) |
+| Folder layout | All repos directly in `~`: `~/srsRAN_Project`, `~/srsRAN_4G`, `~/oran-sc-ric` |
+
+**Network addresses, ports and credentials (for reference):**
+
+| Thing | Value |
+|---|---|
+| Open5GS core (AMF/UPF) | 10.53.1.2, NGAP port 38412 |
+| gNB side of the core network | 10.53.1.1 |
+| UE IP pool / UE IP | 10.45.0.0/16, UE gets **10.45.1.2**; gateway 10.45.1.1 |
+| RIC Docker subnet | 10.0.2.0/24 |
+| RIC E2 termination | **10.0.2.10:36421** (SCTP) |
+| gNB side of the RIC network | 10.0.2.1 |
+| xApp runner container | 10.0.2.20 |
+| ZMQ ports | gNB TX 2000 / RX 2001, UE TX 2001 / RX 2000 |
+| UE SIM | IMSI `001010123456780`, K `00112233445566778899aabbccddeeff`, OPC `63bfa50ee6523365ff14c1f45f88737d` |
+| PLMN / TAC / APN | `00101` / `7` / `srsapn` |
+| gNB ID / E2 node ID | 411 / default `gnbd_001_001_00019b_0` (confirm from the RIC logs) |
+| Open5GS web UI | http://localhost:9999 (admin / 1423) |
+
+---
+
+## Day 1: From nothing to a working 5G network
+
+### Part A: Prepare Windows (about 20 min)
+
+**A1. Check virtualization:** Task Manager (Ctrl+Shift+Esc) → Performance → CPU → **"Virtualization: Enabled"**. If it says Disabled, enable Intel VT-x / AMD SVM in the BIOS.
+
+**A2. Turn off conflicting Windows features:** Start → "Turn Windows features on or off" → **untick** Hyper-V, Virtual Machine Platform, Windows Hypervisor Platform, and Windows Subsystem for Linux → OK → restart.
+
+**A3. Install the Microsoft Visual C++ Redistributable:** https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+**A4. Install VirtualBox:** https://www.virtualbox.org/wiki/Downloads → "Windows hosts" → right-click the installer → **Run as administrator** → keep the defaults → accept the network-interruption and driver prompts → restart the laptop.
+
+**A5. Download Ubuntu 22.04:** https://releases.ubuntu.com/22.04/ → **"64-bit PC (AMD64) desktop image"** (~5 GB). Don't use the main ubuntu.com page; it offers a newer version.
+
+### Part B: Create the VM (about 10 min)
+
+1. VirtualBox → **New**
+   - Name: `ORAN-Ubuntu`
+   - ISO Image: select the downloaded `ubuntu-22.04.x-desktop-amd64.iso`
+   - **Tick "Skip Unattended Installation"** (the automatic install can create a user without sudo rights)
+2. Hardware: Base Memory **8192 MB**, Processors **half of the host's cores (min 4)**
+3. Hard disk: Create new, **80 GB**, "Pre-allocate Full Size" **unticked**
+4. Finish. Then select the VM → **Settings**:
+   - Display → Video Memory **128 MB**, Graphics Controller **VMSVGA**, Enable 3D Acceleration **off**
+   - Network → Adapter 1 → **NAT** (leave as default)
+
+### Part C: Install Ubuntu (about 30 min)
+
+1. Start the VM → **Install Ubuntu** → Normal installation → tick "Download updates while installing"
+2. **"Erase disk and install Ubuntu"** (this only erases the VM's virtual disk; Windows is untouched)
+3. Create a username and password. **Remember the password**; it's needed for every `sudo` command.
+4. Reboot when asked, and remove the installation medium if prompted.
+
+**Fix the display (Guest Additions):**
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y build-essential dkms linux-headers-$(uname -r)
+```
+In the VM window menu: **Devices → Insert Guest Additions CD image**, then:
+```bash
+sudo /media/$USER/VBox_GAs_*/VBoxLinuxAdditions.run
+sudo reboot
+```
+After the reboot, enable **View → Auto-resize Guest Display**.
+
+**Check the environment:**
+```bash
+lsb_release -a    # must say Ubuntu 22.04
+nproc             # number of cores you allocated
+free -h           # ~8 GB total
+df -h ~           # plenty of free space
+```
+
+### Part D: Install dependencies and Docker (about 15 min)
+
+```bash
+# srsRAN Project build dependencies + ZeroMQ
+sudo apt install -y git curl cmake make gcc g++ pkg-config \
+  libfftw3-dev libmbedtls-dev libsctp-dev libyaml-cpp-dev libgtest-dev libzmq3-dev
+
+# srsRAN 4G (srsUE) build dependencies
+sudo apt install -y libboost-program-options-dev libconfig++-dev
+
+# Traffic and debugging tools
+sudo apt install -y iperf3 net-tools htop
+
+# Docker Engine + Compose plugin
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+```
+**Log out and log back in** (or reboot), then:
+```bash
+docker run hello-world
+docker compose version
+```
+
+### Part E: Download the exact software versions (about 10 min)
+
+```bash
+cd ~
+git clone https://github.com/srsran/srsRAN_Project.git
+cd srsRAN_Project && git checkout release_25_10 && cd ~
+
+git clone https://github.com/srsran/srsRAN_4G.git
+cd srsRAN_4G && git checkout release_23_11 && cd ~
+
+git clone https://github.com/srsran/oran-sc-ric.git
+cd oran-sc-ric && git checkout 621ade2 && cd ~
+```
+Check:
+```bash
+cd ~/srsRAN_Project && git describe --tags   # release_25_10
+cd ~/srsRAN_4G && git describe --tags        # release_23_11
+cd ~/oran-sc-ric && git log -1 --oneline     # 621ade2 ...
+```
+
+### Part F: Build (about 1–1.5 hours, mostly waiting)
+
+**F1. srsRAN Project (gNB) with ZMQ:**
+```bash
+cd ~/srsRAN_Project
+mkdir -p build && cd build
+cmake ../ -DENABLE_EXPORT=ON -DENABLE_ZEROMQ=ON 2>&1 | tee cmake_out.txt
+grep -i zeromq cmake_out.txt     # MUST show "Found libZEROMQ"
+make -j$(nproc)
+ls -l apps/gnb/gnb               # binary must exist
+```
+
+**F2. srsRAN 4G (srsUE) with ZMQ:**
+```bash
+cd ~/srsRAN_4G
+mkdir -p build && cd build
+cmake ../ 2>&1 | tee cmake_out.txt
+grep -i zeromq cmake_out.txt     # must show ZeroMQ found
+make -j$(nproc)
+ls -l srsue/src/srsue            # binary must exist
+```
+
+- If a build stops with **"Killed"**, RAM ran out. Re-run with `make -j2`.
+- If ZMQ wasn't found, check that `libzmq3-dev` is installed, delete the `build` folder, and rebuild.
+
+**F3. Pre-build the Docker images** (can run while F1/F2 compile, in another terminal):
+```bash
+cd ~/srsRAN_Project/docker && docker compose build 5gc
+cd ~/oran-sc-ric && docker compose build
+```
+
+### Part G: Run the 5G network end-to-end (about 30 min)
+
+**Startup order:** Core → gNB → UE. Use separate terminal tabs. The RIC isn't running today, so the gNB will print **E2 connection errors. Ignore those on Day 1**; only the AMF connection matters.
+
+**Terminal 1: 5G Core**
+```bash
+cd ~/srsRAN_Project/docker
+docker compose up 5gc
+```
+Wait until the logs settle. The subscriber database is pre-filled with srsUE's SIM.
+
+**Terminal 2: gNB**
+```bash
+cd ~/srsRAN_Project/build/apps/gnb
+sudo ./gnb -c ~/oran-sc-ric/e2-agents/srsRAN/gnb_zmq.yaml
+```
+Expect `Connecting to AMF on 10.53.1.2:38412`, then `==== gNB started ===`. The core terminal shows `gNB-N2 accepted`.
+
+**Terminal 3: UE**
+```bash
+sudo ip netns add ue1     # once per boot ("File exists" = already done, fine)
+cd ~/srsRAN_4G/build/srsue/src
+sudo ./srsue ~/oran-sc-ric/e2-agents/srsRAN/ue_zmq.conf
+```
+Expect `RRC Connected`, then **`PDU Session Establishment successful. IP: 10.45.1.2`**.
+
+**Terminal 4: Routes and connectivity tests**
+```bash
+sudo ip ro add 10.45.0.0/16 via 10.53.1.2
+sudo ip netns exec ue1 ip route add default via 10.45.1.1 dev tun_srsue
+
+sudo ip netns exec ue1 ping -c 5 10.45.1.1     # uplink: UE → core
+ping -c 5 10.45.1.2                            # downlink: host → UE
+```
+
+**Throughput test** (the same tool we'll use later to create congestion):
+```bash
+# Terminal 4: server on the host
+iperf3 -s -i 1
+# Terminal 5: uplink, UDP 10 Mbps, 60 s
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -i 1 -t 60 -u -b 10M
+# Downlink (reverse mode), the direction our RC control acts on
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -i 1 -t 60 -u -b 20M -R
+```
+Type `t` + Enter in the gNB terminal for a live per-UE trace (CQI, MCS, bitrate).
+
+**Shut down:** Ctrl+C on UE → gNB → core, in that order. If you restart the gNB, restart the UE too.
+
+✅ **Day 1 done when:** the UE gets IP 10.45.1.2, ping works in both directions, and iperf3 shows throughput. **This completes project step 1.**
+
+---
+
+## Day 2: RIC, E2 monitoring, and the control path
+
+### Part H: Start the full stack with the RIC
+
+**Full startup order:** Core → RIC → gNB → UE → traffic → xApp.
+
+**Terminal 1: Core**
+```bash
+cd ~/srsRAN_Project/docker && docker compose up 5gc
+```
+
+**Terminal 2: RIC**
+```bash
+cd ~/oran-sc-ric
+docker compose up
+```
+Wait for **`ric_submgr | RMR is ready now ...`**. This starts 7 containers: e2term (10.0.2.10), e2mgr (.11), dbaas (.12), submgr (.13), appmgr (.14), rtmgr_sim (.15), python_xapp_runner (.20).
+
+**Terminal 3: gNB** (the config already has `e2.addr: 10.0.2.10`, `bind_addr: 10.0.2.1`, port 36421, with KPM and RC enabled)
+```bash
+cd ~/srsRAN_Project/build/apps/gnb
+sudo ./gnb -c ~/oran-sc-ric/e2-agents/srsRAN/gnb_zmq.yaml
+```
+Expect `Connecting to NearRT-RIC on 10.0.2.10:36421`. The RIC terminal shows a line containing `associate-ran-to-e2t` with a `ranNamelist`. **Note the E2 node ID** there (default `gnbd_001_001_00019b_0`).
+
+> ⚠️ **The RIC enforces a 60-second wait after a disconnect.** After stopping the gNB, wait 60 s before starting it again, or you'll get `E2 SETUP FAILURE`.
+
+**Terminal 4: UE, routes, and background traffic**
+```bash
+sudo ip netns add ue1
+cd ~/srsRAN_4G/build/srsue/src && sudo ./srsue ~/oran-sc-ric/e2-agents/srsRAN/ue_zmq.conf
+```
+In another tab:
+```bash
+sudo ip ro add 10.45.0.0/16 via 10.53.1.2
+sudo ip netns exec ue1 ip route add default via 10.45.1.1 dev tun_srsue
+sudo ip netns exec ue1 ping -i 0.1 10.45.1.1     # keep running; KPIs need traffic
+```
+
+### Part I: Prove E2 monitoring works (project step 2, the go/no-go checkpoint)
+
+**Terminal 5: Example KPM xApp**
+```bash
+cd ~/oran-sc-ric
+docker compose exec python_xapp_runner ./kpm_mon_xapp.py --metrics=DRB.UEThpDl,DRB.UEThpUl --kpm_report_style=5
+```
+Expected every 1 second:
+```
+RIC Indication Received from gnb_... for Subscription ID: ..., KPM Report Style: 5
+--UE_id: 0
+---Metric: DRB.UEThpDl, Value: [...]
+---Metric: DRB.UEThpUl, Value: [...]
+```
+Known issue: sometimes the xApp needs **one restart** before indications appear. Ctrl+C and run it again. If you get a node ID error, add `--e2_node_id <ID from RIC logs>`.
+
+**Metrics the gNB exposes over E2SM-KPM** (minimum reporting period 1 s). Our model's features must come from these, or be derived from them:
+
+| Metric | Meaning |
+|---|---|
+| `DRB.UEThpDl` | DL throughput per UE |
+| `DRB.UEThpUl` | UL throughput per UE |
+| `DRB.RlcSduTransmittedVolumeDL` | RLC DL transmitted volume (kbits) |
+| `DRB.RlcSduTransmittedVolumeUL` | RLC UL transmitted volume (kbits) |
+| `DRB.RlcPacketDropRateDl` | RLC DL packet drop rate |
+| `DRB.PacketSuccessRateUlgNBUu` | UL packet success rate |
+| CQI, RSRP, RSRQ | Exposed, but documented as **dummy** values; don't use them as features |
+
+Supported KPM report styles: 1–5 (style 4/5 give per-UE data).
+
+✅ **Checkpoint:** KPI values print every second and change when you start or stop iperf3. If this works, the riskiest part of the project is done.
+
+### Part J: Prove the control path works (de-risks project step 5)
+
+The gNB supports **E2SM-RC Control Service Style 2, Action ID 6: Slice-level PRB quota**. This is our "give the UE more or fewer resource blocks" action. It acts on **downlink** PRBs. The gNB config defines slice `sst: 1` with `min_prb_policy_ratio: 0`, `max_prb_policy_ratio: 100`.
+
+**J1. Start a heavy downlink load:**
+```bash
+iperf3 -s -i 1                                                           # host
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -i 1 -t 300 -u -b 20M -R     # UE side
+```
+
+**J2. Run the example RC xApp:**
+```bash
+cd ~/oran-sc-ric
+docker compose exec python_xapp_runner ./simple_rc_xapp.py
+```
+Every 5 s it alternates UE 0 between `PRB_max: 5` and `PRB_max: 275`.
+
+**J3. Verify the network reacts:** type `t` in the gNB terminal and watch the DL `brate` column. It should **drop sharply** at PRB_max 5 and **recover** at 275. iperf3 shows the same pattern.
+
+**J4. Run the combined example** (KPM monitoring + RC control together, the closest template to our final xApp):
+```bash
+docker compose exec python_xapp_runner ./simple_xapp.py
+```
+It tracks DL data per UE and toggles the max PRB ratio between 10% and 100% after every 20 MB.
+
+**Library API we'll use in our own xApp** (`~/oran-sc-ric/xApps/python/lib/`):
+- Subscribe to per-UE KPIs: `self.e2sm_kpm.subscribe_report_service_style_4(e2_node_id, report_period_ms, matchingUeConds, metric_names, granul_period_ms, callback)`
+- Decode an indication: `self.e2sm_kpm.extract_meas_data(indication_msg)` → `["ueMeasData"][ue_id]["measData"][metric]` = list of values
+- Send control: `self.e2sm_rc.control_slice_level_prb_quota(e2_node_id, ue_id, min_prb_ratio=..., max_prb_ratio=..., dedicated_prb_ratio=100, ack_request=1)`
+- The `~/oran-sc-ric/xApps/python` folder is mounted inside the container at `/opt/xApps`, so you edit on the host and run inside without restarting the RIC.
+
+✅ **Day 2 done when:** DL throughput visibly drops and recovers in step with the RC xApp. Monitoring and control over E2 are both proven, so the closed loop is technically possible.
+
+### Part K (optional, if time remains): Log live KPIs to CSV
+
+Create `~/oran-sc-ric/xApps/python/kpm_logger_xapp.py`:
+
+```python
+#!/usr/bin/env python3
+import csv, time, signal, argparse
+from lib.xAppBase import xAppBase
+
+METRICS = ["DRB.UEThpDl", "DRB.UEThpUl",
+           "DRB.RlcSduTransmittedVolumeDL", "DRB.RlcSduTransmittedVolumeUL",
+           "DRB.RlcPacketDropRateDl", "DRB.PacketSuccessRateUlgNBUu"]
+
+class KpmLogger(xAppBase):
+    def __init__(self, http_port, rmr_port, out_file, label):
+        super().__init__('', http_port, rmr_port)
+        self.label = label
+        self.f = open(out_file, "a", newline="")
+        self.w = csv.writer(self.f)
+        if self.f.tell() == 0:
+            self.w.writerow(["timestamp", "ue_id", "label"] + METRICS)
+
+    def cb(self, e2_agent_id, sub_id, hdr, msg):
+        data = self.e2sm_kpm.extract_meas_data(msg)
+        ts = time.time()
+        for ue_id, ue in data["ueMeasData"].items():
+            row = [ts, ue_id, self.label]
+            for m in METRICS:
+                v = ue["measData"].get(m)
+                row.append(sum(v) / len(v) if v else "")
+            self.w.writerow(row)
+            print(row)
+        self.f.flush()
+
+    @xAppBase.start_function
+    def start(self, e2_node_id):
+        conds = [{'testCondInfo': {'testType': ('ul-rSRP', 'true'),
+                  'testExpr': 'lessthan', 'testValue': ('valueInt', 1000)}}]
+        self.e2sm_kpm.subscribe_report_service_style_4(
+            e2_node_id, 1000, conds, METRICS, 1000, self.cb)
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument("--e2_node_id", default="gnbd_001_001_00019b_0")
+    p.add_argument("--out", default="/opt/xApps/kpm_log.csv")
+    p.add_argument("--label", default="normal")   # normal / congested
+    a = p.parse_args()
+    x = KpmLogger(8090, 4560, a.out, a.label)
+    x.e2sm_kpm.set_ran_func_id(2)
+    for s in (signal.SIGINT, signal.SIGTERM, signal.SIGQUIT):
+        signal.signal(s, x.signal_handler)
+    x.start(a.e2_node_id)
+```
+
+Collect two labelled runs (about 10 min each). Stop any other xApp first, since they share ports 8090/4560:
+```bash
+cd ~/oran-sc-ric
+# Normal load
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -t 600 -u -b 2M -R &
+docker compose exec python_xapp_runner ./kpm_logger_xapp.py --label normal
+# Congested load (well above what 10 MHz can carry)
+sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -t 600 -u -b 60M -R &
+docker compose exec python_xapp_runner ./kpm_logger_xapp.py --label congested
+```
+The output is at `~/oran-sc-ric/xApps/python/kpm_log.csv`. If the subscription fails with all 6 metrics, reduce the list to 2–3 to find the one being rejected.
+
+---
+
+## Startup cheat sheet (save as `~/start_order.txt`)
+
+```
+1. cd ~/srsRAN_Project/docker && docker compose up 5gc
+2. cd ~/oran-sc-ric && docker compose up                 (wait: "RMR is ready now")
+3. cd ~/srsRAN_Project/build/apps/gnb && sudo ./gnb -c ~/oran-sc-ric/e2-agents/srsRAN/gnb_zmq.yaml
+4. sudo ip netns add ue1
+   cd ~/srsRAN_4G/build/srsue/src && sudo ./srsue ~/oran-sc-ric/e2-agents/srsRAN/ue_zmq.conf
+5. sudo ip ro add 10.45.0.0/16 via 10.53.1.2
+   sudo ip netns exec ue1 ip route add default via 10.45.1.1 dev tun_srsue
+6. Traffic: iperf3 -s -i 1   +   sudo ip netns exec ue1 iperf3 -c 10.53.1.1 -u -b <rate> -R -t <secs>
+7. xApp: cd ~/oran-sc-ric && docker compose exec python_xapp_runner ./<xapp>.py
+Stop order: xApp → UE → gNB → RIC → core.  After stopping the gNB, wait 60 s before restarting it.
+```
+
+## Troubleshooting quick reference
+
+| Symptom | Cause → fix |
+|---|---|
+| VM window tiny or blurry | Guest Additions not installed → Part C |
+| VM won't start (VT-x / AMD-V error) | Virtualization off in BIOS, or Hyper-V still on → Part A |
+| cmake doesn't find ZeroMQ | `sudo apt install libzmq3-dev`, delete `build/`, rebuild |
+| `make` gets "Killed" | Out of RAM → `make -j2` |
+| `docker: permission denied` | Didn't log out and back in after `usermod` |
+| Core: port 3000 `address already in use` | In `srsRAN_Project/docker/docker-compose.yml`, change `"3000:3000/tcp"` to `"3001:3000/tcp"` |
+| UE: `RRC Connected` → `Received RRC Release`, no IP | Namespace missing (`sudo ip netns list` must show `ue1`), or IMSI not in the DB (check the core logs / web UI at localhost:9999) |
+| UE has an IP but ping fails | Routes missing (step 5 of the cheat sheet), or a manually installed Open5GS is running → remove it |
+| gNB: `E2 SETUP FAILURE` | Restarted within 60 s → stop, wait 60 s, start again |
+| xApp subscribes but prints nothing | Restart the xApp once (known issue); make sure traffic is running |
+| Wrong E2 node ID | Read `ranNamelist` from the RIC logs → pass `--e2_node_id <id>` |
+| gNB rejects a config key | Wrong srsRAN version → `git describe --tags` must show `release_25_10` |
+| "Late" / real-time warnings in the gNB | CPU overloaded → close other apps, give the VM more cores, run `sudo ~/srsRAN_Project/scripts/srsran_performance` |
+
+## After Day 2, send back
+
+1. Terminal output of Part I (KPIs printing) and Part J (throughput dropping and recovering)
+2. `kpm_log.csv`, if Part K was done
+3. **The congestion model report:** the 8 features, the model type and framework, the training dataset, and the results
+
+Next comes matching the 8 features to the E2 metrics, building the adapter, and starting the prediction xApp (project steps 3–4).
+
+---
+
+Sources:
+- [srsRAN: O-RAN NearRT-RIC and xApp tutorial](https://docs.srsran.com/projects/project/en/latest/tutorials/source/near-rt-ric/source/index.html)
+- [srsRAN: gNB with srsUE (ZMQ) tutorial](https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html)
+- [srsRAN Project installation guide](https://docs.srsran.com/projects/project/en/latest/user_manuals/source/installation.html)
+- [srsRAN 4G installation guide](https://docs.srsran.com/projects/4g/en/latest/general/source/1_installation.html)
+- [srsran/oran-sc-ric repository](https://github.com/srsran/oran-sc-ric)
