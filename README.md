@@ -3,7 +3,7 @@
 **Project:** Sim-to-Reality Transfer Validation on Live O-RAN Hardware  
 **Institution:** COEP Technological University, Pune  
 **Date:** October 26, 2026  
-**Status:** Day 3 Ready - Corrected 250ms Implementation ✅
+**Status:** **Day 3 Verified & Passed ✅** (Moving to Day 4)
 
 ---
 
@@ -22,68 +22,30 @@ This project validates **simulation-to-reality transfer** for congestion predict
 
 ---
 
-## 📊 The Six Shared Measurements
+## 📊 The Six Shared Measurements (Verified on Testbed)
 
-Both simulation and our testbed collect the same 6 inputs every **250ms**:
+Both simulation and our testbed collect the same 6 inputs every **250ms** (verified working on our live srsRAN testbed on Oct 26, 2026):
 
-| # | Measurement | Source (Our Testbed) | Units |
-|---|-------------|---------------------|-------|
-| 1 | **Cell Load** | PRB usage / 12,500 | 0-1 |
-| 2 | **DL CQI** | `cqi` from gNB | 0-15 |
-| 3 | **UL SINR** | `pusch_snr_db` | dB |
-| 4 | **DL Speed** | `dl_brate` | Mbps |
-| 5 | **UL Speed** | `ul_brate` | Mbps |
-| 6 | **UL Error Rate** | `ul_nof_nok / (ok+nok)` | % |
+| # | Measurement | Source (Our Testbed) | Units | Verified Status |
+|---|-------------|---------------------|-------|-----------------|
+| 1 | **Cell Load** | PRB usage / 12,500 (`cell_util`) | 0-1 | ✅ Verified (`cell_util` 0.15 - 0.85) |
+| 2 | **DL CQI** | `cqi` from gNB | 0-15 | ✅ Verified (64-QAM table, values 0-15) |
+| 3 | **UL SINR** | `pusch_snr_db` | dB | ✅ Verified (~4.5 dB avg) |
+| 4 | **DL Speed** | `dl_brate` | Mbps | ✅ Verified (tracked iperf traffic) |
+| 5 | **UL Speed** | `ul_brate` | Mbps | ✅ Verified |
+| 6 | **UL Error Rate** | `ul_nof_nok / (ok+nok)` | % | ✅ Verified |
 
 **Prediction Target:** Onset of starvation 1 second ahead (4 intervals)
 
 ---
 
-## 🏗️ System Architecture
+## 🚀 Current Status & Verified Results (Day 3 Complete)
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Live O-RAN Testbed (Ubuntu VM)                     │
-│                                                      │
-│  ┌────┐ ZMQ  ┌──────┐ N2   ┌──────┐                │
-│  │ UE │◄────►│ gNB  │◄────►│ Core │                │
-│  │ x3 │      │srsRAN│      │(5GC) │                │
-│  └────┘      └───┬──┘      └──────┘                │
-│                  │ E2                                │
-│                  ▼                                   │
-│         ┌─────────────────┐                         │
-│         │ RIC (10.0.2.10) │                         │
-│         │  • E2 Term      │                         │
-│         │  • xApps        │                         │
-│         └─────────────────┘                         │
-│                                                      │
-│  Output: E6 test data (250ms intervals)             │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 Current Status
-
-### ✅ Completed (Days 1-2)
-- Full O-RAN stack operational (Core, RIC, gNB, UE)
-- E2 interface verified (KPM monitoring + RC control)
-- Go/No-Go checkpoint passed (October 18, 2026)
-
-### ⚠️ Critical Issue Fixed (October 24, 2026)
-**Problem:** Previous `kpm_logger_xapp.py` approach was **completely wrong**:
-- Used 1-second intervals (should be 250ms)
-- Used E2 subscription (should parse gNB logs)
-- Manual labels (should calculate from delivered/offered formula)
-- Would have invalidated E6 experiment
-
-**Solution:** Implemented corrected approach in `oran-work/` and `phase2_corrected/`
-
-### 🎯 Ready Now (Day 3)
-- Corrected 250ms implementation
-- gNB log metrics as primary source
-- Automated testing scripts
-- Complete documentation
+### ✅ Completed & Tested (Day 3 Verified)
+- **250ms Metrics Reporting:** Verified via `/tmp/gnb.log` parsing (`metrics_summary.py`), arriving reliably every 250ms at near real-time speed (`time_x` ≈ 0.85–0.90).
+- **JSON Websocket Feed:** Verified on port 8001 (`ws_adapter.py`).
+- **Single-UE Capacity:** Measured single-UE capacity plateau at **~15–20 Mbps** with `cell_util` scaling correctly up to 0.85.
+- **CQI Table:** Confirmed `mcs_table: qam64` (matching TRACTOR).
 
 ---
 
@@ -91,7 +53,9 @@ Both simulation and our testbed collect the same 6 inputs every **250ms**:
 
 ```
 .
-├── oran-work/                    # ⭐ Day 3 Implementation (START HERE)
+├── README.md                     # This file (Project overview)
+│
+├── oran-work/                    # Day 3 Implementation & Results
 │   ├── README.md                 # Detailed Day 3 guide
 │   ├── SETUP_COMPLETE.md         # Complete setup documentation
 │   ├── START_HERE.txt            # Visual quick start
@@ -99,7 +63,8 @@ Both simulation and our testbed collect the same 6 inputs every **250ms**:
 │   ├── metrics_summary.py        # Parse gNB logs → 250ms reports
 │   ├── day3_setup_checklist.sh   # Verify prerequisites
 │   ├── day3_test_guide.sh        # Interactive Day 3 testing
-│   └── day3_results_template.txt # Document findings
+│   ├── day3_results_template.txt # Document findings
+│   └── day3_results.txt          # ⭐ VERIFIED DAY 3 RESULTS
 │
 ├── phase2_corrected/             # Corrected Implementation Details
 │   ├── ANALYSIS_WRONG_CODE.md    # Why old approach was wrong
@@ -107,15 +72,13 @@ Both simulation and our testbed collect the same 6 inputs every **250ms**:
 │   ├── configs/                  # Corrected configs (250ms, 3 UEs)
 │   └── scripts/                  # Corrected data collection scripts
 │
-├── 5G/                           # Project Documentation & History
-│   ├── README.md                 # Original project overview
-│   ├── PHASE2_E6_GUIDE.md        # Original 6-step guide
-│   ├── SETUP_GUIDE.md            # Days 1-2 setup
-│   ├── RUN_GUIDE.md              # Daily testbed startup
-│   └── TRANSFER_GUIDE.md         # Project sharing
-│
-└── README.md                     # This file
-```
+└── docs/                         # Project Reference Guides
+    ├── PROJECT_OVERVIEW.md       # Original project details
+    ├── PHASE2_E6_GUIDE.md        # 6-step validation guide
+    ├── SETUP_GUIDE.md            # Days 1-2 infrastructure setup
+    ├── RUN_GUIDE.md              # Daily testbed startup
+    └── TRANSFER_GUIDE.md         # Project sharing guide
+
 
 ---
 
