@@ -1,0 +1,27 @@
+{
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "mean": {
+    "cell_util": 0.731003,
+    "dl_cqi": 10.411239,
+    "ul_sinr": 23.125108,
+    "dl_mbps": 0.638651,
+    "ul_mbps": 0.125141,
+    "ul_error_pct": 23.44743
+  },
+  "std": {
+    "cell_util": 0.28646,
+    "dl_cqi": 3.631875,
+    "ul_sinr": 13.724741,
+    "dl_mbps": 1.089594,
+    "ul_mbps": 0.23345,
+    "ul_error_pct": 15.779048
+  },
+  "fit_on": "train"
+}

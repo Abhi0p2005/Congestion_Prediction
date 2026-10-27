@@ -1,0 +1,15 @@
+{
+  "experiment": "E2",
+  "features": [
+    "cell_util",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps"
+  ],
+  "window": 10,
+  "hidden": 64,
+  "layers": 1,
+  "threshold": 0.8147034049034119,
+  "val_pr_auc": 0.34370804406069216,
+  "test_pr_auc": 0.026513359823960164
+}

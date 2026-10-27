@@ -1,0 +1,17 @@
+{
+  "experiment": "E4",
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "window": 10,
+  "hidden": 64,
+  "layers": 1,
+  "threshold": 0.9164617657661438,
+  "val_pr_auc": 0.05250148650401748,
+  "test_pr_auc": 0.056153924597097324
+}

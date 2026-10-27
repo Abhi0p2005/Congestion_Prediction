@@ -23,3 +23,8 @@ backups/
 
 # Keep directory structure
 !.gitkeep
+
+# ML
+__pycache__/
+venv/
+*.csv.gz
