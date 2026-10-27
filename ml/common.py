@@ -37,6 +37,8 @@ EXPECTED = {
 META_COLS = ["source", "experiment", "ue", "bin", "t_s", "serving_cell",
              "traffic_class", "n_ue_active", "starved"]
 
+SCALINGS = ["handoff", "per_source"]
+
 RESULTS_DIR = Path("results")
 MODELS_DIR = Path("models")
 
@@ -64,6 +66,49 @@ def load_split(datasets_dir, exp, split):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce").astype("float32")
     return df
+
+
+_SOURCE_STATS = {}
+
+
+def source_stats(datasets_dir):
+    """Mean/std of the raw features for each source, from training pools only:
+    simulator from E1 train, real (TRACTOR) from E4 train. Neither touches the shared real test set."""
+    key = str(datasets_dir)
+    if key not in _SOURCE_STATS:
+        stats = {}
+        for exp in ["E1", "E4"]:
+            df = load_split(datasets_dir, exp, "train")
+            for src, g in df.groupby("source"):
+                stats[src] = {c: (float(g[c].mean()), float(g[c].std()) or 1.0) for c in FEATURES}
+        _SOURCE_STATS[key] = stats
+    return _SOURCE_STATS[key]
+
+
+def load_data(datasets_dir, exp, split, scaling="handoff"):
+    """Load a split. scaling="handoff" keeps the dataset team's f_* columns (train-set scaling).
+    scaling="per_source" rebuilds f_* so each source is standardised with its own statistics
+    (ablation for the sim-to-real gap; defined for E1-E4)."""
+    df = load_split(datasets_dir, exp, split)
+    if scaling == "handoff":
+        return df
+    if exp == "E5":
+        raise ValueError("per_source scaling is only defined for E1-E4")
+    stats = source_stats(datasets_dir)
+    df = df.sort_values(["experiment", "ue", "bin"], kind="mergesort").reset_index(drop=True)
+    filled = df.groupby(["experiment", "ue"])[FEATURES].ffill()   # same rule as build_datasets.py
+    unknown = set(df["source"].unique()) - set(stats)
+    if unknown:
+        raise ValueError(f"no statistics for source(s) {unknown}")
+    for c in FEATURES:
+        m = df["source"].map({k: v[c][0] for k, v in stats.items()})
+        sd = df["source"].map({k: v[c][1] for k, v in stats.items()})
+        df["f_" + c] = ((filled[c] - m) / sd).fillna(0).astype("float32")
+    return df
+
+
+def run_name(exp, model, features, scaling, seed):
+    return f"{exp}_{model}_{features}{'' if scaling == 'handoff' else '_ps'}_s{seed}"
 
 
 # ---------------------------------------------------------------- windows
@@ -133,7 +178,7 @@ def save_result(name, result):
     with open(RESULTS_DIR / f"{name}.json", "w") as f:
         json.dump(result, f, indent=2)
     cols = ["n", "positives", "base_rate", "pr_auc", "roc_auc", "brier", "threshold", "precision", "recall", "f1", "alarms"]
-    flat = {"run": name, **{k: result.get(k) for k in ["experiment", "model", "features", "seed"]}}
+    flat = {"run": name, **{k: result.get(k) for k in ["experiment", "model", "features", "scaling", "seed"]}}
     for part in ["val", "test"]:
         for c in cols:
             flat[f"{part}_{c}"] = result.get(part, {}).get(c)

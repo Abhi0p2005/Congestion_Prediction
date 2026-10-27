@@ -10,6 +10,7 @@ Threshold for precision/recall/F1 is chosen on a validation set of whole series
 held out from TRAIN, never on test.
 
 Usage:  python 02_baselines.py --data <folder> --exp E2
+        python 02_baselines.py --data <folder> --exp E2 --scaling per_source
         python 02_baselines.py --data <folder> --exp all
 """
 import argparse
@@ -21,8 +22,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from common import (EXPERIMENTS, FEATURE_SETS, best_f1_threshold, build_windows, evaluate,
-                    find_datasets_dir, fmt, load_split, save_result, series_split)
+from common import (EXPERIMENTS, FEATURE_SETS, SCALINGS, best_f1_threshold, build_windows, evaluate,
+                    find_datasets_dir, fmt, load_data, run_name, save_result, series_split)
 
 
 def summaries(X):
@@ -30,13 +31,13 @@ def summaries(X):
     return np.concatenate([X.mean(1), X.std(1), X[:, -1], X[:, -1] - X[:, 0]], axis=1)
 
 
-def run(ds, exp, features, seed):
+def run(ds, exp, features, seed, scaling):
     fs = FEATURE_SETS[features]
-    tr = load_split(ds, exp, "train"); te = load_split(ds, exp, "test")
+    tr = load_data(ds, exp, "train", scaling); te = load_data(ds, exp, "test", scaling)
     Xtr, ytr, mtr = build_windows(tr, fs); Xte, yte, _ = build_windows(te, fs)
     val = series_split(mtr, seed=seed)
     Xfit, yfit, Xval, yval = Xtr[~val], ytr[~val], Xtr[val], ytr[val]
-    print(f"\n### {exp} | features={features} | train {len(yfit):,} (pos {int(yfit.sum()):,}) "
+    print(f"\n### {exp} | features={features} | scaling={scaling} | train {len(yfit):,} (pos {int(yfit.sum()):,}) "
           f"| val {len(yval):,} (pos {int(yval.sum()):,}) | test {len(yte):,} (pos {int(yte.sum()):,})")
 
     out = {}
@@ -62,9 +63,9 @@ def run(ds, exp, features, seed):
 
     for name, (pval, pte) in out.items():
         thr = best_f1_threshold(yval, pval)
-        res = {"experiment": exp, "model": name, "features": features, "seed": seed,
+        res = {"experiment": exp, "model": name, "features": features, "scaling": scaling, "seed": seed,
                "val": evaluate(yval, pval, thr), "test": evaluate(yte, pte, thr)}
-        save_result(f"{exp}_{name}_{features}_s{seed}", res)
+        save_result(run_name(exp, name, features, scaling, seed), res)
         print(f"  {name:8s} TEST {fmt(res['test'])}")
 
 
@@ -73,9 +74,13 @@ ap.add_argument("--data", required=True)
 ap.add_argument("--exp", default="E2", help="E1, E2, E3_k05, E3_k10, E3_k20, E4, E5 or all")
 ap.add_argument("--features", default="all", choices=list(FEATURE_SETS))
 ap.add_argument("--seed", type=int, default=0)
+ap.add_argument("--scaling", default="handoff", choices=SCALINGS)
 args = ap.parse_args()
 
 ds = find_datasets_dir(args.data)
-for e in (EXPERIMENTS if args.exp == "all" else [args.exp]):
-    run(ds, e, args.features, args.seed)
+exps = EXPERIMENTS if args.exp == "all" else [args.exp]
+if args.scaling == "per_source":
+    exps = [e for e in exps if e != "E5"]   # per-source scaling is defined for E1-E4
+for e in exps:
+    run(ds, e, args.features, args.seed, args.scaling)
 print("\nResults saved in results/ (one JSON per run, plus results/summary.csv)")

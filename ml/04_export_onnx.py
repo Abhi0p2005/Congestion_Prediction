@@ -6,7 +6,7 @@ Creates package/<model name>/ with:
   model_card.json    feature order, window, bin size, horizon, threshold, versions, metrics
   test_vectors.json  RAW input windows + expected probability, so the xApp's own scaling is tested too
 
-Usage:  python 04_export_onnx.py --data <folder> --model E2_lstm_all_s0
+Usage:  python 04_export_onnx.py --data <folder> --model E2_lstm_all_s0   (or E2_tcn_all_s0)
 """
 import argparse
 import json
@@ -22,7 +22,7 @@ import torch
 from common import (MODELS_DIR, WINDOW, build_windows, check_scaler, find_datasets_dir, load_scaler,
                     load_split)
 
-from model_defs import LSTMClassifier
+from model_defs import build_model
 
 class Wrapped(torch.nn.Module):
     def __init__(self, m):
@@ -41,7 +41,11 @@ args = ap.parse_args()
 card = json.load(open(MODELS_DIR / f"{args.model}.json"))
 fs, exp = card["features"], card["experiment"]
 
-model = LSTMClassifier(len(fs), card["hidden"], card["layers"])
+kind = card.get("model", "lstm")
+size = card.get("size", card.get("hidden"))
+if card.get("scaling", "handoff") != "handoff":
+    raise SystemExit("Only models trained with --scaling handoff can be exported (they match scaler.json).")
+model = build_model(kind, len(fs), size, card["layers"])
 model.load_state_dict(torch.load(MODELS_DIR / f"{args.model}.pt", map_location="cpu"))
 model.eval()
 
@@ -90,7 +94,7 @@ json.dump({"features": fs, "window_bins": WINDOW, "note": "rows = oldest..newest
            "vectors": vectors}, open(out / "test_vectors.json", "w"), indent=1)
 
 json.dump({
-    "model": args.model, "trained_on": exp, "architecture": f"LSTM hidden={card['hidden']} layers={card['layers']}",
+    "model": args.model, "trained_on": exp, "architecture": f"{kind.upper()} size={size} layers={card['layers']}",
     "input": {"name": "x", "shape": ["batch", WINDOW, len(fs)], "features_in_order": fs,
               "scaling": "(raw - mean) / std using scaler.json; missing value -> carry last value, else 0 after scaling"},
     "output": {"name": "p", "meaning": "probability of starvation onset 1 s (4 bins) ahead", "calibrated": False},
