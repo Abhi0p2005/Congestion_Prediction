@@ -1,0 +1,271 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    DAY 4: Multi-UE Setup Guide                                ║
+║                    Date: October 27, 2026                                     ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ PREPARATION STATUS - ALL FILES READY ✅                                       │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+✅ subscriber_db.csv          → 3 UEs registered (IMSI ...780, ...781, ...782)
+✅ open5gs.env                → Updated to use subscriber_db.csv
+✅ gnb_multi.yaml             → Multi-UE PRACH config (64 preambles)
+✅ ue1_zmq.conf               → Ports 2101/2100, IMSI ...780, netns ue1
+✅ ue2_zmq.conf               → Ports 2201/2200, IMSI ...781, netns ue2
+✅ ue3_zmq.conf               → Ports 2301/2300, IMSI ...782, netns ue3
+✅ multi_ue_scenario.grc      → GNU Radio broker (slow_down_ratio=1, real-time)
+✅ run_traffic.sh             → Traffic orchestration script
+✅ GNU Radio installed        → gnuradio-companion available
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: Rebuild 5GC Container (ONE-TIME ONLY)                                │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+The subscriber database is loaded at container BUILD time, so we must rebuild:
+
+    cd ~/srsRAN_Project/docker
+    docker compose up --build 5gc
+
+Wait for: "Open5GS daemon started"
+
+Verify in browser: http://localhost:9999 (admin / 1423)
+Expected: 3 subscribers visible (IMSI 001010123456780, ...781, ...782)
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: Start the Multi-UE Network Stack                                     │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+CRITICAL ORDER: Core → RIC → gNB → ALL 3 UEs → GNU Radio Broker
+
+══════════════════════════════════════════════════════════════════════════════
+TERMINAL 1: 5G Core (if not already running from Step 1)
+══════════════════════════════════════════════════════════════════════════════
+cd ~/srsRAN_Project/docker
+docker compose up 5gc
+
+Wait for: "Open5GS daemon started"
+
+══════════════════════════════════════════════════════════════════════════════
+TERMINAL 2: Near-RT RIC
+══════════════════════════════════════════════════════════════════════════════
+cd ~/oran-sc-ric
+docker compose up
+
+Wait for: "RMR is ready now"
+
+══════════════════════════════════════════════════════════════════════════════
+TERMINAL 3: gNB (Multi-UE Config)
+══════════════════════════════════════════════════════════════════════════════
+sudo rm -f /tmp/gnb.log
+cd ~/srsRAN_Project/build/apps/gnb
+sudo ./gnb -c ~/Desktop/oran-work/gnb_multi.yaml
+
+Wait for: "Cell pci=1, bw=10 MHz" (no errors)
+
+══════════════════════════════════════════════════════════════════════════════
+TERMINALS 4, 5, 6: Three UE Instances
+══════════════════════════════════════════════════════════════════════════════
+
+First, create network namespaces (one-time per boot):
+    sudo ip netns add ue1 2>/dev/null
+    sudo ip netns add ue2 2>/dev/null
+    sudo ip netns add ue3 2>/dev/null
+
+Then start each UE in its own terminal:
+
+TERMINAL 4 (UE1):
+    cd ~/srsRAN_4G/build/srsue/src
+    sudo ./srsue ~/Desktop/oran-work/ue1_zmq.conf
+
+TERMINAL 5 (UE2):
+    cd ~/srsRAN_4G/build/srsue/src
+    sudo ./srsue ~/Desktop/oran-work/ue2_zmq.conf
+
+TERMINAL 6 (UE3):
+    cd ~/srsRAN_4G/build/srsue/src
+    sudo ./srsue ~/Desktop/oran-work/ue3_zmq.conf
+
+⚠️  UEs will NOT attach yet - they wait for the GNU Radio broker!
+
+══════════════════════════════════════════════════════════════════════════════
+TERMINAL 7: GNU Radio Broker (START LAST!)
+══════════════════════════════════════════════════════════════════════════════
+gnuradio-companion ~/Desktop/oran-work/multi_ue_scenario.grc
+
+When the GUI opens:
+1. Click the PLAY button (▶ "Execute the flow graph")
+2. A control panel will appear with path-loss sliders (leave at default)
+
+Within ~10 seconds, watch Terminals 4, 5, 6:
+Each UE should print:
+    Random Access Complete. c-rnti=0x46XX, ta=0
+    RRC Connected
+    PDU Session Establishment successful. IP: 10.45.X.2
+    RRC NR reconfiguration successful.
+
+⭐ RECORD THE RNTI MAPPING (from each UE terminal):
+    UE1: c-rnti=0x____  (write in ~/Desktop/oran-work/ue_map.txt)
+    UE2: c-rnti=0x____
+    UE3: c-rnti=0x____
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: Configure Routes and Test Connectivity                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+Open a NEW terminal (Terminal 8) and run:
+
+# Add core network route (one-time per boot)
+sudo ip ro add 10.45.0.0/16 via 10.53.1.2 2>/dev/null
+
+# Add UE default routes
+for i in 1 2 3; do 
+    sudo ip netns exec ue$i ip route add default dev tun_srsue 2>/dev/null
+done
+
+# Test connectivity (all 3 UEs)
+for i in 1 2 3; do
+    echo "=== Testing UE$i ==="
+    sudo ip netns exec ue$i ping -c 3 10.53.1.1
+done
+
+Expected: 0% packet loss for all 3 UEs
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: Verify 250ms Metrics with 3 UEs                                      │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+In Terminal 8:
+    python3 ~/Desktop/oran-work/metrics_summary.py /tmp/gnb.log 12
+
+Expected output (3 UEs shown per row):
+    wall_ms slots time_x cell_util | per UE: rnti cqi snr_db dl_Mbps ul_Mbps ul_err% dl_bs
+        250   250   1.00     0.xxx | 0x4601 15 4.5 0.00 0.00 nan 0 || 0x4602 15 4.6 0.00 0.00 nan 0 || 0x4603 15 4.4 0.00 0.00 nan 0
+
+⚠️  CRITICAL CHECK: time_x must stay ≈ 0.9-1.1 (real-time speed)
+    If time_x < 0.85 consistently → CPU cannot handle 3 UEs in real time!
+    Report this immediately; options: reduce to 2 UEs or use faster machine.
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 5: Measure Cell Capacity (C)                                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+Start iperf3 servers (one per UE):
+    for p in 5201 5202 5203; do iperf3 -s -p $p -D; done
+
+═══════════════════════════════════════════════════════════════════════════════
+Part A: Solo Capacity Tests (verify each UE can reach ~15-20 Mbps alone)
+═══════════════════════════════════════════════════════════════════════════════
+cd ~/Desktop/oran-work
+./run_traffic.sh solo_ue1 30 60M 0 0
+./run_traffic.sh solo_ue2 30 0 60M 0
+./run_traffic.sh solo_ue3 30 0 0 60M
+
+After each run:
+    python3 ~/Desktop/oran-work/metrics_summary.py ~/Desktop/oran-work/runs/solo_ueX/gnb.log 20
+
+Record: delivered Mbps for each UE (should be ~15-20 Mbps)
+
+═══════════════════════════════════════════════════════════════════════════════
+Part B: Equal Load Ramp (find total cell capacity C)
+═══════════════════════════════════════════════════════════════════════════════
+./run_traffic.sh eq_05M 30 5M 5M 5M
+./run_traffic.sh eq_10M 30 10M 10M 10M
+./run_traffic.sh eq_15M 30 15M 15M 15M
+./run_traffic.sh eq_20M 30 20M 20M 20M
+
+After each run, check delivered throughput:
+    tail runs/eq_20M/iperf_ue*.txt | grep receiver
+
+Sum the three delivered rates → this is your CELL CAPACITY (C)
+
+Look for the plateau where:
+    - Total delivered stops increasing
+    - cell_util approaches 0.9-1.0
+    - time_x stays ≈ 1.0
+
+Example: If total delivered = 30 Mbps → C = 30 Mbps
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ STEP 6: Overload Runs (Create Starvation Data)                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+Calculate overload rates (replace C with YOUR measured capacity):
+    1.3 × C → split unequally (e.g., C=30 → 39M total → 18M / 12M / 9M)
+    1.5 × C → split unequally (e.g., C=30 → 45M total → 21M / 14M / 10M)
+
+Run 120-second overload tests:
+    ./run_traffic.sh over_130 120 18M 12M 9M
+    ./run_traffic.sh over_150 120 21M 14M 10M
+
+Verify starvation occurred:
+    python3 ~/Desktop/oran-work/metrics_summary.py ~/Desktop/oran-work/runs/over_150/gnb.log 30
+
+Look for:
+    - cell_util ≈ 0.9-1.0 throughout
+    - time_x ≈ 1.0 (NOT dropping!)
+    - Some intervals where delivered < 0.5 × offered (starvation!)
+
+Check iperf logs:
+    head -20 runs/over_150/iperf_ue1.txt
+
+Each line shows: timestamp, delivered bytes in 0.25s
+Starvation = delivered < (offered_rate × 0.25 / 8) bytes
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+Problem: UEs never attach after starting GNU Radio broker
+Fix:     - Stop broker (click "Kill" in GRC)
+         - Restart ALL 3 UEs (Ctrl+C in each terminal, then re-run srsue)
+         - Click "Execute" in GRC again
+
+Problem: One UE gets "Received RRC Release"
+Fix:     - Check http://localhost:9999 → verify all 3 IMSIs exist
+         - If missing, rebuild 5gc: docker compose up --build 5gc
+
+Problem: time_x < 0.85 with 3 UEs
+Fix:     VM cannot run 3 UEs in real time. Options:
+         1. Close all other apps, give VM more CPU cores
+         2. Reduce to 2 UEs only (acceptable for Day 4)
+         3. Report to dataset team (may affect E6 experiment design)
+
+Problem: iperf3 "server is busy"
+Fix:     Each UE needs its own port (5201, 5202, 5203)
+         Kill old servers: sudo killall iperf3
+         Restart: for p in 5201 5202 5203; do iperf3 -s -p $p -D; done
+
+Problem: "route add" says "File exists"
+Fix:     Route already present (harmless), proceed
+
+Problem: GNU Radio crash or "ZMQ bind error"
+Fix:     - Kill all processes: sudo killall gnb srsue
+         - Wait 60 seconds
+         - Restart from Terminal 3 (gNB) onwards
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ RESTART CHECKLIST (After reboot or network crash)                            │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+□ Wait 60 seconds after stopping gNB/UEs
+□ Kill GNU Radio broker (click "Kill the flow graph")
+□ Recreate namespaces: sudo ip netns add ue{1,2,3}
+□ Start: Core → RIC → gNB → UE1, UE2, UE3 → GNU Radio broker
+□ Verify all 3 UEs attach and get IPs
+□ Re-add routes: sudo ip ro add 10.45.0.0/16 via 10.53.1.2
+               for i in 1 2 3; do sudo ip netns exec ue$i ip route add default dev tun_srsue; done
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ DAY 4 SUCCESS CRITERIA ✅                                                     │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+✅ All 3 UEs attach simultaneously and maintain RRC Connected state
+✅ time_x ≈ 0.9-1.1 (real-time speed) with 3 UEs active
+✅ All 6 model inputs visible per UE in metrics_summary.py output
+✅ Cell capacity C measured (total delivered at cell_util ≈ 0.9-1.0)
+✅ Overload runs (1.3C and 1.5C) completed with starvation bins present
+✅ All runs saved under ~/Desktop/oran-work/runs/ with logs and metadata
+
+═══════════════════════════════════════════════════════════════════════════════
+                            END OF DAY 4 GUIDE
+═══════════════════════════════════════════════════════════════════════════════
