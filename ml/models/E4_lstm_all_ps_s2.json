@@ -1,0 +1,19 @@
+{
+  "experiment": "E4",
+  "model": "lstm",
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "scaling": "per_source",
+  "window": 10,
+  "size": 64,
+  "layers": 1,
+  "threshold": 0.9331824779510498,
+  "val_pr_auc": 0.08046308692397287,
+  "test_pr_auc": 0.06023219784645896
+}
