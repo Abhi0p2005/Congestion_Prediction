@@ -107,6 +107,17 @@ def load_data(datasets_dir, exp, split, scaling="handoff"):
     return df
 
 
+def apply_scaler(df, scaler):
+    """Rebuild f_* from the raw columns with a given {feature: (mean, std)} scaler
+    (forward-fill within each series, scale, then 0 for anything still missing)."""
+    df = df.sort_values(["experiment", "ue", "bin"], kind="mergesort").reset_index(drop=True)
+    filled = df.groupby(["experiment", "ue"])[FEATURES].ffill()
+    for c in FEATURES:
+        m, sd = scaler[c]
+        df["f_" + c] = ((filled[c] - m) / sd).fillna(0).astype("float32")
+    return df
+
+
 def run_name(exp, model, features, scaling, seed):
     return f"{exp}_{model}_{features}{'' if scaling == 'handoff' else '_ps'}_s{seed}"
 

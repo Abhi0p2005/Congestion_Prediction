@@ -12,6 +12,8 @@ from the training set, PR-AUC as the main score.
 | 4 | `04_export_onnx.py --data <folder> --model E2_lstm_all_s0` | Hand-off package for the xApp in `package/` |
 | 5 | `05_run_batch.py --data <folder> --exps E1 E2 E4 --seeds 0 1 2 --models baselines lstm tcn` | Many runs; skips finished ones; safe to stop and restart |
 | 6 | `06_summarize.py` | Mean ± 95% CI over seeds, transfer gap E4 − E2, inference time |
+| 7 | `07_calibrate.py --data <folder> --model all` | Calibration (temperature, Platt on validation, Platt on 10 min of real data), alarm thresholds, alarms per UE-hour, calm false alarms, reliability plots |
+| — | `colab_batch.ipynb` | Runs the TCN batches on a Colab GPU; results saved to Google Drive |
 
 Options: `--features all|reduced|no_ulerr`, `--scaling handoff|per_source`, `--max-train 50000` (quick test).
 

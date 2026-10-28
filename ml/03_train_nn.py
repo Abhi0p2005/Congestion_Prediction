@@ -22,10 +22,15 @@ from common import (FEATURE_SETS, MODELS_DIR, SCALINGS, WINDOW, best_f1_threshol
 from model_defs import build_model
 
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 @torch.no_grad()
 def predict(model, X, batch=8192):
     model.eval()
-    ps = [torch.sigmoid(model(torch.from_numpy(X[i:i + batch]))).numpy() for i in range(0, len(X), batch)]
+    dev = next(model.parameters()).device
+    ps = [torch.sigmoid(model(torch.from_numpy(X[i:i + batch]).to(dev))).cpu().numpy()
+          for i in range(0, len(X), batch)]
     return np.concatenate(ps) if ps else np.array([])
 
 
@@ -63,15 +68,16 @@ print(f"{args.exp} | {args.model} | features={args.features} | scaling={args.sca
       f"(pos {int(yfit.sum()):,}) | val {len(yval):,} (pos {int(yval.sum()):,}) | test {len(yte):,} (pos {int(yte.sum()):,})")
 
 pos_weight = float((len(yfit) - yfit.sum()) / max(yfit.sum(), 1))   # rare onsets -> weight positives up
-model = build_model(args.model, len(fs), size, layers)
+print(f"device: {DEVICE}")
+model = build_model(args.model, len(fs), size, layers).to(DEVICE)
 opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight))
-Xt, yt = torch.from_numpy(Xfit), torch.from_numpy(yfit)
+loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, device=DEVICE))
+Xt, yt = torch.from_numpy(Xfit).to(DEVICE), torch.from_numpy(yfit).to(DEVICE)
 
 best, best_state, bad, t0 = -1.0, None, 0, time.time()
 for epoch in range(1, args.epochs + 1):
     model.train(); t = time.time(); total = 0.0
-    perm = torch.randperm(len(yt))
+    perm = torch.randperm(len(yt), device=DEVICE)
     for i in range(0, len(perm), args.batch):
         b = perm[i:i + args.batch]
         opt.zero_grad()
@@ -81,12 +87,13 @@ for epoch in range(1, args.epochs + 1):
     val_m = evaluate(yval, predict(model, Xval))
     print(f"epoch {epoch:2d} | loss {total/len(yt):.4f} | val PR-AUC {val_m['pr_auc']:.4f} | {time.time()-t:.0f}s")
     if val_m["pr_auc"] > best:
-        best, best_state, bad = val_m["pr_auc"], {k: v.clone() for k, v in model.state_dict().items()}, 0
+        best, best_state, bad = val_m["pr_auc"], {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}, 0
     else:
         bad += 1
         if bad >= args.patience:
             print("early stop"); break
 
+model = model.cpu()                     # final evaluation, timing and saving on CPU (as in the xApp)
 model.load_state_dict(best_state)
 pval, pte = predict(model, Xval), predict(model, Xte)
 thr = best_f1_threshold(yval, pval)
