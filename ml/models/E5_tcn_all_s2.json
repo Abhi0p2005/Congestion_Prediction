@@ -1,0 +1,19 @@
+{
+  "experiment": "E5",
+  "model": "tcn",
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "scaling": "handoff",
+  "window": 10,
+  "size": 32,
+  "layers": 3,
+  "threshold": 0.8891705274581909,
+  "val_pr_auc": 0.0714904746390847,
+  "test_pr_auc": 0.06222302276047304
+}

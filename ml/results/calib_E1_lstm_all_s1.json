@@ -1,0 +1,55 @@
+{
+  "model": "E1_lstm_all_s1",
+  "experiment": "E1",
+  "kind": "lstm",
+  "scaling": "handoff",
+  "seed": 1,
+  "test_pr_auc": 0.32880207033324876,
+  "test_base_rate": 0.055202338844537735,
+  "variants": {
+    "none": {
+      "params": null,
+      "threshold": 0.8089628219604492,
+      "brier": 0.14426656918866027,
+      "ece": 0.22754938458527987,
+      "mean_pred": 0.2827517092227936,
+      "observed_rate": 0.055202338844537735,
+      "precision": 0.3333333333333333,
+      "recall": 0.4485083189902467,
+      "f1": 0.38243747324649907,
+      "alarms_per_ue_hour": 1069.5761644985314,
+      "calm_false_alarm_rate": null
+    },
+    "temp_val": {
+      "params": {
+        "T": 1.3102244218726473
+      },
+      "threshold": 0.7505514621734619,
+      "brier": 0.1401712135448559,
+      "ece": 0.2408682941289583,
+      "mean_pred": 0.2960706353187561,
+      "observed_rate": 0.055202338844537735,
+      "precision": 0.3333333333333333,
+      "recall": 0.4485083189902467,
+      "f1": 0.38243747324649907,
+      "alarms_per_ue_hour": 1069.5761644985314,
+      "calm_false_alarm_rate": null
+    },
+    "platt_val": {
+      "params": {
+        "a": 0.8942283391952515,
+        "b": -2.474517822265625
+      },
+      "threshold": 0.2343531996011734,
+      "brier": 0.0434195790903077,
+      "ece": 0.009242842827315854,
+      "mean_pred": 0.0641346350312233,
+      "observed_rate": 0.055202338844537735,
+      "precision": 0.3333333333333333,
+      "recall": 0.4485083189902467,
+      "f1": 0.38243747324649907,
+      "alarms_per_ue_hour": 1069.5761644985314,
+      "calm_false_alarm_rate": null
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "experiment": "E1",
+  "model": "tcn",
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "scaling": "per_source",
+  "window": 10,
+  "size": 32,
+  "layers": 3,
+  "threshold": 0.7402756810188293,
+  "val_pr_auc": 0.31372137936918276,
+  "test_pr_auc": 0.31278184016473914
+}

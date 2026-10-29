@@ -1,0 +1,19 @@
+{
+  "experiment": "E3_k20",
+  "model": "tcn",
+  "features": [
+    "cell_util",
+    "dl_cqi",
+    "ul_sinr",
+    "dl_mbps",
+    "ul_mbps",
+    "ul_error_pct"
+  ],
+  "scaling": "handoff",
+  "window": 10,
+  "size": 32,
+  "layers": 3,
+  "threshold": 0.7705320119857788,
+  "val_pr_auc": 0.32150613454874216,
+  "test_pr_auc": 0.05092828750652358
+}

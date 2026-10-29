@@ -1,0 +1,19 @@
+{
+  "mean": {
+    "cell_util": 0.17145515978336334,
+    "dl_cqi": 7.7746357917785645,
+    "ul_sinr": 7.203176021575928,
+    "dl_mbps": 0.5358487963676453,
+    "ul_mbps": 0.18149125576019287,
+    "ul_error_pct": 4.487371444702148
+  },
+  "std": {
+    "cell_util": 0.30034899711608887,
+    "dl_cqi": 1.6173686981201172,
+    "ul_sinr": 12.535066604614258,
+    "dl_mbps": 1.650301456451416,
+    "ul_mbps": 0.4810863137245178,
+    "ul_error_pct": 13.569829940795898
+  },
+  "note": "per-source scaling: statistics of the real source 'tractor' (E4 train). For a new network (e.g. the srsRAN testbed) these can be replaced by that network's own mean/std, which is the point of per-source scaling."
+}

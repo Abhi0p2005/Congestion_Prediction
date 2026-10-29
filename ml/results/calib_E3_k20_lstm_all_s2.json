@@ -1,0 +1,75 @@
+{
+  "model": "E3_k20_lstm_all_s2",
+  "experiment": "E3_k20",
+  "kind": "lstm",
+  "scaling": "handoff",
+  "seed": 2,
+  "test_pr_auc": 0.04972735965965593,
+  "test_base_rate": 0.004185864236205816,
+  "real_sample_windows": 5505,
+  "real_sample_onsets": 12,
+  "real_sample_series": 4,
+  "real_sample_minutes": 22.9375,
+  "variants": {
+    "none": {
+      "params": null,
+      "threshold": 0.8182351589202881,
+      "brier": 0.01343070519061834,
+      "ece": 0.01993979275606642,
+      "mean_pred": 0.02412521094083786,
+      "observed_rate": 0.004185864236205816,
+      "precision": 0.046038543897216275,
+      "recall": 0.04287138584247258,
+      "f1": 0.04439855446566856,
+      "alarms_per_ue_hour": 56.12980769230769,
+      "calm_false_alarm_rate": 0.0
+    },
+    "temp_val": {
+      "params": {
+        "T": 1.3733254654896985
+      },
+      "threshold": 0.7494102120399475,
+      "brier": 0.013341001556178497,
+      "ece": 0.031205763963615123,
+      "mean_pred": 0.03539162874221802,
+      "observed_rate": 0.004185864236205816,
+      "precision": 0.046038543897216275,
+      "recall": 0.04287138584247258,
+      "f1": 0.04439855446566856,
+      "alarms_per_ue_hour": 56.12980769230769,
+      "calm_false_alarm_rate": 0.0
+    },
+    "platt_val": {
+      "params": {
+        "a": 0.9140337109565735,
+        "b": -2.627943277359009
+      },
+      "threshold": 0.22220923006534576,
+      "brier": 0.004753767674876301,
+      "ece": 0.0023380521647364963,
+      "mean_pred": 0.004629507660865784,
+      "observed_rate": 0.004185864236205816,
+      "precision": 0.046038543897216275,
+      "recall": 0.04287138584247258,
+      "f1": 0.04439855446566856,
+      "alarms_per_ue_hour": 56.12980769230769,
+      "calm_false_alarm_rate": 0.0
+    },
+    "platt_real": {
+      "params": {
+        "a": 0.8460428714752197,
+        "b": -3.6113839149475098
+      },
+      "threshold": 0.1393277943134308,
+      "brier": 0.004232208337171642,
+      "ece": 0.002208471267093618,
+      "mean_pred": 0.0020218181889504194,
+      "observed_rate": 0.004185864236205816,
+      "precision": 0.03954802259887006,
+      "recall": 0.020937188434695914,
+      "f1": 0.027379400260756193,
+      "alarms_per_ue_hour": 31.91105769230769,
+      "calm_false_alarm_rate": 0.0
+    }
+  }
+}
